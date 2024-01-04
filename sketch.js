@@ -2,24 +2,28 @@ let MIN_CONNECTIONS;
 let TURN_MAX;
 let SEEKING_TURN_MAX;
 let FORK_PROBABILITY;
-let INITIAL_VOLTAGE = 100;
+let VOLTAGE_KEPT;
+let INITIAL_VOLTAGE;
 
 const THICKNESS_FACTOR = 0.5;
 
 const NODE_ATTRACTIVE_RANGE_FACTOR = 3;
 const NODE_HIT_RANGE_FACTOR = 1.5;
-const NODE_RESISTANCE = 0.95;
+const NODE_RESISTANCE = 1;
 
-const NODES_START_X = 50;
-const NODES_START_Y = 400;
-const NODES_WIDTH = 800;
-const NODES_HEIGHT = 225;
+const NODE_WIDTH = 20;
+const NODE_HEIGHT = 30;
 
-const CANVAS_WIDTH = 900;
-const CANVAS_HEIGHT = 1000;
+const CANVAS_WIDTH = 1000;
+const CANVAS_HEIGHT = 1350;
 
 const LINE_THICKNESS = 10;
 const DOT_THICKNESS = 15;
+
+const background_color = {r:10,g:10,b:10};
+const lightning_color = {r:0,g:255,b:0};
+const darker_lightning_color = {r:0,g:200,b:0};
+const text_color = {r:255,g:255,b:255};
 
 const nodes = []
 
@@ -32,59 +36,85 @@ function setup() {
 		TURN_MAX = PI/8;
 		SEEKING_TURN_MAX = PI/16;
 		MIN_CONNECTIONS = 5;
-		FORK_PROBABILITY = 0.3;
+		FORK_PROBABILITY = 0.8;
+		VOLTAGE_KEPT = 0.9;
+		INITIAL_VOLTAGE = 70;
 
 		loadNodes(tape);
+		mutable_nodes = [...nodes];
 
 		let top_left_connections = 0;
 		let bottom_right_connections = 0;
 		while(top_left_connections < MIN_CONNECTIONS || bottom_right_connections < MIN_CONNECTIONS) {
-			background(10,10,10);
-			mutable_nodes = [...nodes];
-			top_left_connections = lightning({x: 0, y: 0, a: PI/4, v: INITIAL_VOLTAGE});
-			bottom_right_connections = lightning({x: CANVAS_WIDTH, y: CANVAS_HEIGHT, a: 4.5*PI/4, v: INITIAL_VOLTAGE+10});
+			background(background_color.r,background_color.g,background_color.b);
+			top_left_connections = lightning({x: 0, y: 250, a: PI/4, v: INITIAL_VOLTAGE});
+			top_left_connections = MIN_CONNECTIONS;
+			bottom_right_connections = lightning({x: CANVAS_WIDTH, y: CANVAS_HEIGHT-400, a: 4.5*PI/4, v: INITIAL_VOLTAGE});
+			bottom_right_connections = MIN_CONNECTIONS;
 		}
-
 		drawNodes();
 	});
 }
 
 function loadNodes(tape) {
 
-	const lines = tape.split('\n');
+	const lines = tape.split('\r\n');
 	const num_lines = lines.length;
 	const line_length = lines[0].length;
+
+	const NODES_WIDTH = CANVAS_WIDTH;
+	const NODES_HEIGHT = CANVAS_HEIGHT;
 
 	for (let line = 0; line < num_lines; line++) {
 		for (let i = 0; i < line_length; i++) {
 			const c = lines[line][i];
-			if (c == '.') {
-				const x =
-					NODES_START_X + (NODES_WIDTH/line_length) * (i);
-				const y =
-					NODES_START_Y + (NODES_HEIGHT/num_lines) * line + 50;
+			const x =
+				(NODES_WIDTH/line_length) * (i);
+			const y =
+				(NODES_HEIGHT/num_lines) * line;
+			if (c == '_') {
+			}
+			else if (c == '@') {
 				nodes.push({x: x, y: y});
+			} else if (y < 1300) {
+				nodes.push({x: x, y: y, c: c});
 			}
 		}
 	}
 }
 
 function drawNodes() {
+	stroke(lightning_color.r, lightning_color.g, lightning_color.b);
 	for (const n of nodes) {
-		let alone = true;
-		for (const m of nodes) {
-			if (n != m) {
-				if (distance(n.x, n.y, m.x, m.y) < 30) {
-					strokeWeight(LINE_THICKNESS);
-					stroke(0, 255, 0);
-					line(n.x, n.y, m.x, m.y);
-					alone = false;
+
+		if (n.c) {
+			fill(lightning_color.r, lightning_color.g, lightning_color.b);
+			// textAlign(LEFT, BOTTOM);
+			textAlign(CENTER, CENTER);
+			textFont('monospace');
+			noStroke();
+			textSize(30);
+			text(n.c, n.x, n.y);
+		} else {
+
+			let alone = true;
+			for (const m of nodes) {
+				if (n != m) {
+					if (distance(n.x, n.y, m.x, m.y) <= max(NODE_HEIGHT,NODE_WIDTH) && !m.c) {
+						strokeWeight(LINE_THICKNESS);
+						stroke(darker_lightning_color.r, darker_lightning_color.g, darker_lightning_color.b);
+						line(n.x, n.y, m.x, m.y);
+						stroke(lightning_color.r, lightning_color.g, lightning_color.b);
+						const TEXT_THICKNESS = 5;
+						line(n.x+TEXT_THICKNESS, n.y+TEXT_THICKNESS, m.x+TEXT_THICKNESS, m.y+TEXT_THICKNESS);
+						alone = false;
+					}
 				}
 			}
-		}
-		if (alone) {
-			strokeWeight(DOT_THICKNESS);
-			point(n.x, n.y);
+			if (alone) {
+				strokeWeight(DOT_THICKNESS);
+				point(n.x, n.y);
+			}
 		}
 	}
 }
@@ -103,7 +133,7 @@ function lightning(c) {
 			return;
 		}
 
-		let new_v = random(c.v*0.8, c.v) - 1;
+		let new_v = random(c.v*VOLTAGE_KEPT, c.v) - 1;
 
 		let seeking_components;
 
@@ -143,7 +173,7 @@ function lightning(c) {
 			components = { x: cos(c.a) * new_v, y: sin(c.a) * new_v }
 		}
 
-		stroke(0,255,0);
+		stroke(lightning_color.r, lightning_color.g, lightning_color.b);
 		strokeWeight(sqrt(c.v)*THICKNESS_FACTOR);
 		push();
 		translate(c.x, c.y);
@@ -153,7 +183,7 @@ function lightning(c) {
 
 		const r = random(0,1);
 		let num_children;
-		if (r < 1 - FORK_PROBABILITY*sqrt(c.v/INITIAL_VOLTAGE)) {
+		if (r < 1 - FORK_PROBABILITY*(c.v**2/INITIAL_VOLTAGE**2)) {
 			num_children = 1;
 		} else {
 			num_children = 2;
